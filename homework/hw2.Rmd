@@ -1,7 +1,9 @@
 ---
-title: "Homework: Finite Precision Arithmetic & Gradient Descent"
+title: 'Homework: Finite Precision Arithmetic & Gradient Descent'
 output:
-  html_notebook: 
+  html_document:
+    df_print: paged
+  html_notebook:
     code_folding: none
     highlight: textmate
 ---
@@ -30,6 +32,7 @@ Try it and see what you get.
 Does the estimate make sense? If not, why?
 How does the estimate change if you change the seed?
 
+
 **Bonus question:** 
 What is, roughly speaking, the distribution of the estimator `sample_var_with_question_mark` under repeated Monte Carlo simulations (i.e. without a fixed seed)?
 
@@ -54,6 +57,18 @@ sample_var_with_question_mark <- (sample_sec_mom - (sample_mean)^2)
 ## Things to commit/submit
 Answers to the questions above.
 
+**Answer**
+The estimate does not make sense since the variance can never be negative.
+Reasons: In R, the numbers are stored in the 64-bits double-precision floating-point format.
+If the true sum of the two numbers contains more than 64 bits, then the excess bits will be lost when the resultis rounded to 64 bits.
+Here, when we calculate theta, we summing up two numbers, 1e10 and rnorm(1), where there's great difference in magnitude.
+Therefore, the entire mantissa of the smaller number may be shifted beyond the field width so that thetamay not exactly match the true summation of the two numbers.
+The same will happen when we get the product of the numbers, a.k.a, when we calculating $\theta^2$.
+The product of two p-digit mantissas will in general contain up to 2p digits, and thus once the correct result cannot be represented exactly in the floating-point system and must be rounded.
+
+When the seed is 140778, the sample_var_with_question_mark has a negative value of -147456.
+when the seed is 42, the sample_var_with_question_mark has a value of 114688, which still does not make sense since the true variance is 1.
+
 
 # Exercise 2: Numerical differentiation
 
@@ -65,18 +80,22 @@ We evaluate its derivative using an analytical formula and compare it to the cen
 Using the starter code provided below, plot the relative error of the numerical approximation in a log-log scale.
 What do you expect the slope of the plotted line to be?
 
-```{r, eval=FALSE}
+
+```{r, eval=TRUE}
 #' Approximate derivative via centered-difference approximation
 approximate_deriv <- function(func, x, dx) {
-  # Fill in
+  return ((func(x+dx)-func(x-dx))/2/dx)
 }
 
 log_logistic_func <- function(x) {
-  # Fill in
+  # logistic(x) = exp(x)/(1+exp(x))
+  # log-logistic(x) = x - log(1+exp(x))
+  return (x - log(1+exp(x)))
 }
 
 log_logistic_deriv <- function(x) {
-  # Fill in
+# log-transformation of the log-logistic function
+  return (1/(1+exp(x)))
 }
 
 # Calculate and plot the relative errors of finite difference approximations
@@ -104,15 +123,27 @@ plot(
   cex.axis = fontsize,
   type = 'l'
 )
-
 ```
 
 **Questions:**
 Does the relative error plot agree with what the mathematical theory predicts? Explain the observed phenomenon.
 
+**Answer**
+The relative error plot does not agree with the mathematical theory. In theory, we expect the line to have a negative slope. 
+As $\Delta x$ decreases (much smaller than 1), the scale of the error will decrease given $O(\Delta x^2)$ will be small and negligible.
+However, here we saw the relative error goes down first as $\Delta x$ gets smaller; while after $\Delta x$ gets to $2^-{18}$, the relative error starts going up. 
+
+**Questions:**
 Also, what is the slope in the "latter part" of your plotted line, roughly speaking? 
 Explain why we observe such a slope in the relative error. 
 (Hint: Consider a machine with 10 decimal digits of accuracy. What happens if we numerically differentiate $f(x) = x$ at $x = 1$ with $\Delta x = 0.1, 0.01, 0.001, \ldots$.)
+
+**Answer**
+The slope in the latter part of our plotted line is around 1.
+
+For this question, the relative error is $\frac{O(\Delta x^2)+\epsilon}{2\Delta xf'(x)}$, where $\epsilon$ is the machine epsilon.
+Before the tipping point, the relative error is dominated by $O(\Delta x^2)/f'(x)$, therefore, the slope was roughly -2. This happens when $\Delta x$ is not too small so that $f(x+\Delta x)-f(x-\Delta x)$ can be computed in finite-precision with reasonable error.
+However, when $\Delta x$ gets smaller, the relative error is dominated by the machine epsilon, so that the slope is roughly $-\frac{log_2(\epsilon/(2\Delta x_1f'(x)))-log_2(\epsilon/(2\Delta x_2f'(x)))}{log_2(\Delta x_1)-log_2(\Delta x_2)}=1$.
 
 ## Part B: Extention to multivariate functions
 
@@ -129,32 +160,56 @@ Then compare a numerically approximated gradient to one computed via an analytic
 2) by the chain rule, the gradient of $g(\boldsymbol{y})$ for $\boldsymbol{y} = \boldsymbol{A} \boldsymbol{x}$ with respect to $\boldsymbol{x}$ is $\nabla_{\boldsymbol{x}} \left( g \circ \boldsymbol{A} \right) (\boldsymbol{x}) = \boldsymbol{A}^\intercal \nabla_{\boldsymbol{y}} g(\boldsymbol{y})$.)
 
 ```{r, eval=FALSE}
+are_all_close <- function(v, w, abs_tol = 1e-6, rel_tol = 1e-6) {
+  abs_diff <- abs(v - w)
+  are_all_within_atol <- all(abs_diff < abs_tol)
+  are_all_within_rtol <- all(abs_diff < rel_tol * pmax(abs(v), abs(w)))
+  return(are_all_within_atol && are_all_within_rtol)
+}
+
+# approx_grad_for_loop <- function(func, x, dx = .Machine$double.eps^(1/3)) {
+#   # finite difference for multivariate
+#   d <- length(x)
+#   numerical_grad <- rep(0, d)
+#   for (i in 1:d){
+#     delta_x <- rep(0, d)
+#     delta_x[i] <- dx
+#     numerical_grad[i] <- (func(x + delta_x) - func(x - delta_x)) / (2*dx)
+#   }
+#   return(numerical_grad)
+# }
+
 approx_grad <- function(func, x, dx = .Machine$double.eps^(1/3)) {
-  numerical_grad <- rep(0, length(x))
-  # Fill in
-  return(numerical_grad)
+  # finite difference for multivariate
+  return (sapply(1:length(x), function(i) approx_partial_grad(i, func, x, dx)))
+}
+
+approx_partial_grad <- function(i, func, x, dx = .Machine$double.eps^(1/3)) {
+  delta_x <- rep(0, length(x))
+  delta_x[i] <- dx
+  return ((func(x + delta_x) - func(x - delta_x)) / (2*dx))
 }
 
 set.seed(410)
 n_param <- 4
 X <- matrix(rnorm(2 * n_param^2), nrow = 2 * n_param, ncol = n_param)
-Sigma_inv <- t(X) %*% X
-  
+SIGMAINV <- t(X) %*% X
+
 #' Calculate log-density of centered Gaussian up to an additive factor
-gaussian_logp <- function(x, Sigma_inv) {
+gaussian_logp <- function(x, Sigma_inv = SIGMAINV) {
   logp <- - .5 * t(x) %*% Sigma_inv %*% x
   return(logp)
 }
 
-gaussian_grad <- function(x, Sigma_inv) {
-  grad <- rep(0, length(x)) # Replace with an actual formula
+gaussian_grad <- function(x, Sigma_inv  = SIGMAINV) {
+  grad <- - Sigma_inv %*% x
   return(grad)
 }
 
 x <- c(3, 1, 4, 1)
 
-analytical_grad <- gaussian_grad(x, Sigma_inv)
-numerical_grad <- approx_grad(function(x) gaussian_logp(x, Sigma_inv), x)
+analytical_grad <- gaussian_grad(x, SIGMAINV)
+numerical_grad <- approx_grad(func = function(x) gaussian_logp(x, SIGMAINV), x = x)
 testthat::expect_true(are_all_close(
   analytical_grad, numerical_grad, abs_tol = Inf, rel_tol = 1e-3
 ))
@@ -203,4 +258,4 @@ Please, pretty please, do not calculate an inverse of a matrix.
     
 ## Things to commit/submit
 
-Link to the pull request.
+Link to the pull request: https://github.com/graced03/hiperglm/pull/1
