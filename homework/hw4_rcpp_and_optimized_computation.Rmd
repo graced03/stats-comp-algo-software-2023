@@ -41,6 +41,7 @@ Try running the code chunk multiple times.
 first_val <- inner_prod(v, w)
 
 for (i in 1:10^6) {
+  print(i)
   v <- rep(1, vec_size)
   w <- rep(1, vec_size)
   subseq_val <- inner_prod(v, w)
@@ -54,6 +55,9 @@ for (i in 1:10^6) {
 **Questions:**
 What behavior do you observe above? How do you explain it?
 
+**Answer**
+When I ran the code for multiple times, there was always an error, the value of the second inner prod changed but was never the correct answer.
+It happens when the buggy code retrieves values in the vector from index 1 to index n (v.size(), w.size()). However, in R, it stores the vector from indices 0 to n-1. Therefore, the last value retrieved points to an un-allocated space outside of the indicated memory space for vector v or w, leading to the error of the inner product.
 
 ## Part B: Sloppy matrix-matrix multiplication
 
@@ -79,6 +83,10 @@ dgemm_eigen(A, B)
 
 **Questions:**
 What do you get as an output? What if you re-run the code chunk? Explain the observed behavior.
+
+**Answer**
+The output of the above code is a 4x2 matrix with all numbers in the first column to be 1024, and all numbers in the the second column to be a very large number 2.769776e+282. When I re-ran the code, the first column remained the same, but the second column will change to a different number and sometimes it gives out NaN. It happens given that R stores vector in the column-major order, so that matrix B is stored as a 1024 dimension vector where each element is 1. Therefore, we the computer does the matrix multiplication, it gets 1024 in the first column. And for the second column, the computer points to unallocated space so that the value changes every time when we re-ran it and it sometimes gives NaN.
+
 
 ## Part C: Consequence of "tresspassing"
 
@@ -113,6 +121,13 @@ Running the same piece of code from an R console (instead of an RStudio session)
 * Why does the second code chunk run fine?
 * Modify `axpy_c.cpp` to make the function safer to use.
 
+**Answer**
+The R session aborted when I tried to run the first code chunk. It happens when the two vectors are of different dimension and the code tried to modify y on the memory that was not allocated to y (y is of dimension 1000 and when i>=1000, the program was not able to find y[i]).
+
+The second code chunk ran fine given that the dimension of y is larger than x. So that when i goes from 0 to 999, it is within the memory allocated to y, but it only gives expected results on the first 1000 elements.
+
+Here we added one line to check the dimension of the two vectors before the calculation.
+
 
 # Exercise 3: Multiplying two matrices ain't quite what you learned in your linear algebra class
 
@@ -140,8 +155,24 @@ B <- matrix(rnorm(n_inner * n_col_out), nrow = n_inner, ncol = n_col_out)
 ```
 
 ```{r}
-# Check the output of `row_col_dot_matmat`
+are_all_close <- function(v, w, abs_tol = 1e-8, rel_tol = 1e-8) {
+  abs_diff <- abs(v - w)
+  are_all_within_atol <- all(abs_diff < abs_tol)
+  are_all_within_rtol <- all(abs_diff < rel_tol * pmax(abs(v), abs(w)))
+  return(are_all_within_atol && are_all_within_rtol)
+}
 ```
+
+```{r}
+# Check the output of `row_col_dot_matmat`
+
+base_out <- A %*% B
+row_col_matmat_out <- row_col_dot_matmat(A,B)
+are_all_close(row_col_matmat_out, base_out)
+
+```
+
+Here we tested with the are_all_close function and proved that the two outputs agreed.
 
 ## Part B: Going one step beyond your linear algebra class
 
@@ -151,16 +182,33 @@ Recalling from lecture that "column-oriented" matrix-vector multiplication is mo
 Then compare performances of `row_col_dot_matmat` and `col_oriented_matmat` (but only after you test your column-oriented implementation).
 Which one is faster and why?
 
+**Answer**
+The `col_oriented_matmat`, which took 189ms (min and median) is faster than `row_col_dot_matmat`, which took 2.94s (min and median). It happens given that matrices are stored in the column major order. As we discussed in the class, to access the matrix by row, the program needs to jump from one spot to another, which takes longer time than when we access the whole column by moving to the element stored next.
+
 ```{r}
 # Check and benchmark
+col_oriented_matmat_out <- col_oriented_matmat(A,B)
+are_all_close(col_oriented_matmat_out, base_out)
+
+bench::mark(
+  row_col_dot_matmat(A, B)
+)
+bench::mark(
+  col_oriented_matmat(A, B)
+)
 ```
 
 Also compare with performance of the matrix-matrix multiplication via `%*%` in R, which uses whatever the BLAS library your R was configured with.
 (You can find out which BLAS library R is using via `sessionInfo()` or `extSoftVersion()`.) 
 
 ```{r}
-# Fill in
+bench::mark(
+  A %*% B
+)
 ```
+
+**Answer**
+Here we found that using the `col_oriented_matmat` is 2 times faster than the base R matrix multiplication function.
 
 When benchmarking alternative implementations (or alternative algorithms, more generally), keep in mind that the relative performance depends significantly on the size of a test problem.
 It is important, therefore, to benchmark your implementation/algorithm on problems of realistic size. 
@@ -211,9 +259,24 @@ Report what you find.
 ```{r, warning=FALSE, eval=FALSE}
 # Import `dgemm_eigen()` from lecture
 Rcpp::sourceCpp(file.path("..", "lecture", "src", "gemm_eigen.cpp"))
+# dir.create('~/.R')
+# file.create('~/.R/Makevars')
 ```
+
+by default, around 59-60ms
 
 ```{r, eval=FALSE}
 # Benchmark
-dgemm_eigen(A, B)
+bench::mark(dgemm_eigen(A, B))
+
+bench::mark(col_oriented_matmat(A, B))
+
+# bench::mark(
+#   row_col_dot_matmat(A, B)
+# )
+# 
+bench::mark(
+  A %*% B
+)
+
 ```
