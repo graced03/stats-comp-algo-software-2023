@@ -67,11 +67,6 @@ solve_via_cholesky <- function(A, b) {
   return (backsolve(R, forwardsolve(t(R), b)))
 }
 
-solve_via_qr <- function(A, b){
-  qr <- qr_wrapper(A)
-  return (solve(qr$R, t(qr$Q) %*% b))
-}
-
 are_all_close <- function(v, w, abs_tol = 1e-8, rel_tol = 1e-8) {
   abs_diff <- abs(v - w)
   are_all_within_atol <- all(abs_diff < abs_tol)
@@ -92,10 +87,6 @@ bench::mark(
 )
 bench::mark(
   solve_via_cholesky(A, b)
-)
-bench::mark(
-  # Solve via QR decomposition
-  solve_via_qr(A, b)
 )
 
 bench::mark(
