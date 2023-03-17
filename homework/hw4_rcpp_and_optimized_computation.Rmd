@@ -256,14 +256,26 @@ Selectively turn on and off SSE, AVX, and FMA to see how each option affects the
 Finally, turn on both AVX and FMA and check the resulting performances.
 Report what you find.
 
+**Answer**
+The following answer given are generated with MacBook Air Early 2015 with Intel Core i5 processor. 
+
+| Complier   | Eigen | Col   | default| 
+| -------  - |:-----:| -----:|-------:|
+| SSE        | 352ms | 1s    | 1.45s  |
+| AVX        | 945ms | 1.31s | 1.29s  |
+| FMA        | 904ms |  1.2s | 1.46s  |
+| AVX SSE    | 128ms | 793ms | 1.29s  |
+| FMA SSE    | 77.2ms| 822ms | 1.24s  |
+| AVX FMA    | 831ms | 1.22s | 1.24s  |
+| AVX FMA SSE| 78.8ms| 696ms | 1.32s  |
+
+From the above table, the `dgemm_eigen()` function is the fastest, while the column-oriented calculation is usually faster than the default method `%*%` in R except we we only turn on AVX. Paired FMA with SSE, we achieved the fastest computation using the `dgemm_eigen()` function. We can conclude that using FMA where the floating-point operation performs multiplication and addition in one step speeds up the matrix-matrix multiplication a lot.
+
 ```{r, warning=FALSE, eval=FALSE}
 # Import `dgemm_eigen()` from lecture
-Rcpp::sourceCpp(file.path("..", "lecture", "src", "gemm_eigen.cpp"))
-# dir.create('~/.R')
-# file.create('~/.R/Makevars')
+Rcpp::sourceCpp(file.path("..", "lecture", "src", "gemm_eigen.cpp"), rebuild = TRUE)
 ```
 
-by default, around 59-60ms
 
 ```{r, eval=FALSE}
 # Benchmark
@@ -271,10 +283,6 @@ bench::mark(dgemm_eigen(A, B))
 
 bench::mark(col_oriented_matmat(A, B))
 
-# bench::mark(
-#   row_col_dot_matmat(A, B)
-# )
-# 
 bench::mark(
   A %*% B
 )
